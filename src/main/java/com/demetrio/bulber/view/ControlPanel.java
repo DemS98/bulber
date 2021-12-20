@@ -105,7 +105,9 @@ public class ControlPanel extends JPanel implements Closeable {
 
         JPanel commandPanel = new JPanel();
         commandPanel.setLayout(new BoxLayout(commandPanel, BoxLayout.Y_AXIS));
-        commandPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COMMAND_PANEL_BORDER_TITLE)));
+        JScrollPane commandScrollPane = new JScrollPane(commandPanel);
+        commandScrollPane.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COMMAND_PANEL_BORDER_TITLE)));
+
 
         JPanel onOffPanel = new JPanel();
         ImageIcon on = new ImageIcon(new ImageIcon(Objects.requireNonNull(ControlPanel.class.getClassLoader()
@@ -146,9 +148,9 @@ public class ControlPanel extends JPanel implements Closeable {
         colorPickerPanel.add(confirmColorPanel);
 
         JPanel optionsPanel = new JPanel();
-        optionsPanel.setLayout(new GridLayout(2, 1, 0, 20));
+        optionsPanel.setLayout(new GridLayout(2, 1, 0, 10));
 
-        JPanel brightnessTemperaturePanel = new JPanel(new GridLayout(1, 2, 20, 0));
+        JPanel brightnessTemperaturePanel = new JPanel(new GridLayout(1, 2, 10, 0));
         JPanel brightnessPanel = new JPanel();
         brightnessPanel.setLayout(new BoxLayout(brightnessPanel, BoxLayout.Y_AXIS));
         brightnessPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.BRIGHTNESS_BORDER_TITLE)));
@@ -164,7 +166,6 @@ public class ControlPanel extends JPanel implements Closeable {
         brightness.setMajorTickSpacing(10);
         Hashtable<Integer, JLabel> brightnessLabels = new Hashtable<>();
         brightnessLabels.put(brightnessMinValue, new JLabel(brightnessMinValue + "%"));
-        brightnessLabels.put(brightnessDefaultValue, new JLabel(brightnessDefaultValue + "%"));
         brightnessLabels.put(brightnessMaxValue, new JLabel(brightnessMaxValue + "%"));
         brightness.setLabelTable(brightnessLabels);
         brightness.setPaintLabels(true);
@@ -192,7 +193,6 @@ public class ControlPanel extends JPanel implements Closeable {
             temperature.setMajorTickSpacing(500);
             Hashtable<Integer, JLabel> temperatureLabels = new Hashtable<>();
             temperatureLabels.put(device.getMinTemperature(), new JLabel(device.getMinTemperature() + "K"));
-            temperatureLabels.put(device.getDefaultTemperature(), new JLabel(device.getDefaultTemperature() + "K"));
             temperatureLabels.put(device.getMaxTemperature(), new JLabel(device.getMaxTemperature() + "K"));
             temperature.setLabelTable(temperatureLabels);
             temperature.setPaintLabels(true);
@@ -249,7 +249,7 @@ public class ControlPanel extends JPanel implements Closeable {
 
         commandPanel.add(onOffPanel);
         commandPanel.add(colorPickerPanel);
-        commandPanel.add(Box.createVerticalStrut(20));
+        commandPanel.add(Box.createVerticalStrut(10));
         commandPanel.add(optionsPanel);
 
         UIUpdater uiUpdater = UIUpdater.builder()
@@ -334,7 +334,7 @@ public class ControlPanel extends JPanel implements Closeable {
                             displayVelocity.setLabelTable(newLabels);
                             micDisplayPanel.revalidate();
                             micDisplayPanel.repaint();
-                            commandPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COMMAND_PANEL_BORDER_TITLE)));
+                            commandScrollPane.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COMMAND_PANEL_BORDER_TITLE)));
                             colorPickerPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COLOR_PICKER_BORDER_TITLE)));
                             confirmColor.setText(props.getProperty(BulberConst.BUTTON_CONFIRM));
                             brightnessPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.BRIGHTNESS_BORDER_TITLE)));
@@ -372,7 +372,7 @@ public class ControlPanel extends JPanel implements Closeable {
         this.add(topPanel);
         this.add(micDisplayPanel);
         this.add(Box.createVerticalStrut(10));
-        this.add(commandPanel);
+        this.add(commandScrollPane);
 
         micButton.addMouseListener(new MouseAdapter() {
             @Override

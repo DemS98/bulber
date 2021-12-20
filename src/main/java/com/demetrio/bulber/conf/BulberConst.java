@@ -158,7 +158,7 @@ public interface BulberConst {
     String COMMAND_VOCAL_TRANSITION_SECONDS = "command.vocal.transition.seconds";
     String COMMAND_VOCAL_TEMPERATURE = "command.vocal.temperature";
     String COMMAND_VOCAL_RGB = "command.vocal.rgb";
-    String COMMAND_VOCAL_RGB_SEPARATOR = "command.vocal.rgb.separator";
+    String COMMAND_VOCAL_NUMBER_SEPARATOR = "command.vocal.number.separator";
     String COMMAND_VOCAL_LIGHT_ON = "command.vocal.light.on";
     String COMMAND_VOCAL_LIGHT_OFF = "command.vocal.light.off";
 

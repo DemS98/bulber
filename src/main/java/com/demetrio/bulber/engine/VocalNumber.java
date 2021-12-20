@@ -6,10 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import pl.allegro.finance.tradukisto.ValueConverters;
 
+import java.text.Normalizer;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 public class VocalNumber {
 
@@ -20,8 +19,6 @@ public class VocalNumber {
     private static final VocalNumber INSTANCE = new VocalNumber();
 
     private Map<String, Integer> vocalNumberMap;
-
-    private String separator;
 
     private VocalNumber() {
         initCache();
@@ -38,37 +35,46 @@ public class VocalNumber {
         ValueConverters converter = ValueConverters.valueOf(props.getProperty(BulberConst.VOCAL_CONVERTER));
         vocalNumberMap = new HashMap<>();
         for(int i=0; i <= 15000; i++) {
-            String word = converter.asWords(i).replace('-', ' ');
+            String word = converter.asWords(i).replace("-", "").replace(" ", "");
             vocalNumberMap.put(word, i);
         }
 
         logger.debug(props.getProperty(BulberConst.VOCAL_END_INIT_CACHE), System.currentTimeMillis() - start);
-        separator = props.getProperty(BulberConst.COMMAND_VOCAL_RGB_SEPARATOR);
     }
 
     public String replaceVocalsWithNumbers(String str) {
+        str = Normalizer.normalize(str, Normalizer.Form.NFD).replaceAll("\\p{M}", "");
+
         if (props.getProperty(BulberConst.LANG).equals("en")) {
             str = str.replaceAll("\\s+and\\s+", " ");
         }
-        String[] words = str.split(separator);
+        String[] words = str.split("\\s+");
         StringBuilder sb = new StringBuilder();
 
-        int commandFirstSpaceIndex = words[0].indexOf(' ');
-        if (commandFirstSpaceIndex != -1) {
-            sb.append(words[0], 0, commandFirstSpaceIndex);
-            sb.append(' ');
-
-            String word = words[0].substring(commandFirstSpaceIndex + 1);
-            Integer number = vocalNumberMap.get(word);
-            sb.append(number != null ? number : word);
-        } else {
-            sb.append(words[0]);
-        }
-        sb.append(' ');
-
-        for(int i=1;i<words.length;i++) {
+        int i=0;
+        while (i < words.length) {
+            StringBuilder word = new StringBuilder(words[i]);
             Integer number = vocalNumberMap.get(words[i]);
-            sb.append(number != null ? number : words[i]);
+            Integer temp = number;
+            while (temp != null && i < words.length - 1) {
+                if (words[++i].equals(props.getProperty(BulberConst.COMMAND_VOCAL_NUMBER_SEPARATOR))) {
+                    break;
+                }
+                word.append(words[i]);
+                temp = vocalNumberMap.get(word.toString());
+                if (temp == null) {
+                    i--;
+                    break;
+                }
+                number = temp;
+            }
+
+            if (number != null) {
+                sb.append(number);
+            } else {
+                sb.append(word);
+            }
+            i++;
             sb.append(' ');
         }
 

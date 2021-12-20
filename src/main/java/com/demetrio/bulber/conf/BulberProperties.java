@@ -9,8 +9,7 @@ import org.apache.commons.configuration2.ex.ConfigurationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 
 public class BulberProperties {
 
@@ -32,7 +31,11 @@ public class BulberProperties {
             String lang = getSupportedLanguages().stream()
                             .filter(Locale.getDefault().getLanguage()::equals).findFirst().orElse(Locale.ENGLISH.getLanguage());
             logger.debug("Lang = {}", lang);
-            configuration.addConfiguration((i18nConfiguration = new Configurations().properties(BulberConst.I18N_PROPERTIES.replace("{}",lang))));
+            configuration.addConfiguration((i18nConfiguration = new Configurations().propertiesBuilder()
+                    .configure(new Parameters().properties()
+                            .setFileName(BulberConst.I18N_PROPERTIES.replace("{}",lang))
+                            .setListDelimiterHandler(new DefaultListDelimiterHandler(BulberConst.ARRAY_DELIMITER)))
+                    .getConfiguration()));
         } catch (ConfigurationException e) {
             logger.error("Error reading bulber configuration file", e);
             System.exit(1);
@@ -59,13 +62,20 @@ public class BulberProperties {
         return configuration.getBoolean(key, false);
     }
 
-    public List<String> getSupportedLanguages() { return configuration.getList(String.class, BulberConst.SUPPORTED_LANGS); }
+    public List<String> getStringListProperty(String key) {
+        return configuration.getList(String.class, key);
+    }
+
+    public List<String> getSupportedLanguages() { return getStringListProperty(BulberConst.SUPPORTED_LANGS); }
 
     public void changeLanguage(String lang) {
         configuration.removeConfiguration(i18nConfiguration);
         try {
-            configuration.addConfiguration((i18nConfiguration = new Configurations().properties(BulberConst.I18N_PROPERTIES.replace("{}",
-                    lang))));
+            configuration.addConfiguration((i18nConfiguration = new Configurations().propertiesBuilder()
+                    .configure(new Parameters().properties()
+                            .setFileName(BulberConst.I18N_PROPERTIES.replace("{}",lang))
+                            .setListDelimiterHandler(new DefaultListDelimiterHandler(BulberConst.ARRAY_DELIMITER)))
+                    .getConfiguration()));
         } catch (ConfigurationException e) {
             logger.error("Error reading bulber configuration file", e);
             System.exit(1);

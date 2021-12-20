@@ -162,10 +162,10 @@ public class CommandParser {
                         }
                         break;
                     case TRANSITION:
-                        if (updater.isDeviceOn() && words.length - (i + 1) <= 2 && sb.indexOf(command.getKasaCommand()) == -1) {
+                        if (words.length - (i + 1) <= 2 && sb.indexOf(command.getKasaCommand()) == -1) {
                             try {
                                 int value = Integer.parseInt(words[++i]);
-                                if (i + 1 < words.length && words[i+1].equals(props.getProperty(BulberConst.COMMAND_VOCAL_TRANSITION_SECONDS))) {
+                                if (i + 1 < words.length && props.getStringListProperty(BulberConst.COMMAND_VOCAL_TRANSITION_SECONDS).contains(words[i+1])) {
                                     i++;
                                     value *= 1000;
                                 }
@@ -209,7 +209,8 @@ public class CommandParser {
                         break;
                     case ON: case OFF:
                         if (((updater.isDeviceOn() && command == Command.OFF) ||
-                                (!updater.isDeviceOn() && command == Command.ON)) && words.length == 1) {
+                                (!updater.isDeviceOn() && command == Command.ON)) && !commandPresent) {
+                            commandPresent = true;
                             sb.append(command.getKasaCommand());
                             uiTasks.add(updater::switchPower);
                         } else {
