@@ -4,6 +4,7 @@ import com.demetrio.bulber.engine.CommandParser;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.function.Consumer;
 
 public class UIUpdater {
     private JColorChooser colorChooser;
@@ -12,6 +13,7 @@ public class UIUpdater {
     private JSlider transition;
     private JTextField transitionTextField;
     private JToggleButton onOff;
+    private Consumer<Boolean> onOffAction;
     private JSlider temperature;
     private JTextField temperatureTextField;
 
@@ -22,6 +24,7 @@ public class UIUpdater {
         private JSlider transition;
         private JTextField transitionTextField;
         private JToggleButton onOff;
+        private Consumer<Boolean> onOffAction;
         private JSlider temperature;
         private JTextField temperatureTextField;
 
@@ -46,8 +49,9 @@ public class UIUpdater {
             return  this;
         }
 
-        public Builder withPowerButton(JToggleButton powerButton) {
+        public Builder withPowerButton(JToggleButton powerButton, Consumer<Boolean> action) {
             this.onOff = powerButton;
+            this.onOffAction = action;
             return this;
         }
 
@@ -59,18 +63,19 @@ public class UIUpdater {
 
         public UIUpdater build() {
             return new UIUpdater(colorChooser, brightness, brightnessTextField, transition, transitionTextField, onOff,
-                    temperature, temperatureTextField);
+                    onOffAction, temperature, temperatureTextField);
         }
     }
 
     private UIUpdater(JColorChooser colorChooser, JSlider brightness, JTextField brightnessTextField, JSlider transition,
-                      JTextField transitionTextField, JToggleButton onOff, JSlider temperature, JTextField temperatureTextField) {
+                      JTextField transitionTextField, JToggleButton onOff, Consumer<Boolean> onOffAction, JSlider temperature, JTextField temperatureTextField) {
         this.colorChooser = colorChooser;
         this.brightness = brightness;
         this.brightnessTextField = brightnessTextField;
         this.transition = transition;
         this.transitionTextField = transitionTextField;
         this.onOff = onOff;
+        this.onOffAction = onOffAction;
         this.temperature = temperature;
         this.temperatureTextField = temperatureTextField;
     }
@@ -99,7 +104,9 @@ public class UIUpdater {
     }
 
     public void switchPower() {
-        onOff.doClick();
+        boolean selected = !isDeviceOn();
+        onOff.setSelected(selected);
+        onOffAction.accept(selected);
     }
 
     public void updateTemperature(int temperature) {

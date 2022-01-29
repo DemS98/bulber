@@ -22,33 +22,8 @@ public interface BulberConst {
     // discover properties consts
     String CIRCLE_SPIN_DISCOVER_SIZE = "circle.spin.discover.size";
 
-    // python-kasa command consts
-    String COMMAND_COLOR = "command.color";
-    String COMMAND_BRIGHTNESS = "command.brightness";
-    String COMMAND_TRANSITION = "command.transition";
-    String COMMAND_TEMPERATURE = "command.temperature";
-    String COMMAND_LIGHT_ON = "command.light.on";
-    String COMMAND_LIGHT_OFF = "command.light.off";
-    String COMMAND_KASA = "command.kasa";
-    String COMMAND_DISCOVER = "command.discover";
-    String COMMAND_TEMPERATURE_RANGE = "command.temperature.range";
-
-    // kasa manager properties consts
-    String DEVICE_NAME_PROPERTY = "device.name.property";
-    String DEVICE_NAME_REGEX = "device.name.regex";
-    String DEVICE_ADDRESS_PROPERTY = "device.address.property";
-    String DEVICE_ADDRESS_REGEX = "device.address.regex";
-    String DEVICE_STATE_PROPERTY = "device.state.property";
-    String DEVICE_STATE_REGEX = "device.state.regex";
-    String DEVICE_TEMPERATURE_PROPERTY = "device.temperature.property";
-    String DEVICE_TEMPERATURE_REGEX = "device.temperature.regex";
-    String DEVICE_MIN_TEMPERATURE_PROPERTY = "device.min.temperature.property";
-    String DEVICE_MAX_TEMPERATURE_PROPERTY = "device.max.temperature.property";
-    String DEVICE_TEMPERATURE_RANGE_REGEX = "device.temperature.range.regex";
-
     // control panel properties consts
     String BRIGHTNESS_MIN_VALUE = "brightness.min.value";
-    String BRIGHTNESS_DEFAULT_VALUE = "brightness.default.value";
     String BRIGHTNESS_MAX_VALUE = "brightness.max.value";
     String TRANSITION_MIN_VALUE = "transition.min.value";
     String TRANSITION_MAX_VALUE = "transition.max.value";
@@ -85,6 +60,11 @@ public interface BulberConst {
     String LANG_FLAG_PATH = "lang.flag.path";
     String LANG_FLAG_WIDTH = "lang.flag.width";
     String LANG_FLAG_HEIGHT = "lang.flag.height";
+    String INFO_PATH = "info.path";
+    String INFO_SIZE = "info.size";
+    String OPEN_TREE_PATH = "open.tree.path";
+    String CLOSE_TREE_PATH = "close.tree.path";
+    String LEAF_TREE_PATH = "leaf.tree.path";
 
     // i18n properties consts
 
@@ -95,6 +75,13 @@ public interface BulberConst {
     // main
     String INIT_CLASS = "init.class";
     String LOOK_AND_FEEL = "look.and.feel";
+
+    // kasa manager
+    String BROADCAST_START = "broadcast.start";
+    String BROADCAST_ERROR = "broadcast.error";
+    String NON_BULB_DEVICE = "non.bulb.device";
+    String BROADCAST_END = "broadcast.end";
+    String NETWORK_ERROR = "network.error";
 
     // discover
     String MICROPHONE_ERROR = "microphone.error";

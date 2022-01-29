@@ -2,114 +2,199 @@ package com.demetrio.bulber.engine;
 
 import com.demetrio.bulber.conf.BulberConst;
 import com.demetrio.bulber.conf.BulberProperties;
+import com.demetrio.bulber.engine.bulb.Bulb;
+import com.demetrio.bulber.engine.bulb.Request;
+import com.demetrio.bulber.engine.bulb.System;
 import com.demetrio.bulber.view.Device;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import java.io.*;
+import java.net.*;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.*;
+import java.util.concurrent.*;
 
 public class KasaManager {
 
+    private static final Logger logger = LoggerFactory.getLogger(KasaManager.class);
+    private static final ObjectMapper mapper = new ObjectMapper();
     private static final BulberProperties props = BulberProperties.getInstance();
+
+    private static class BulbConnection implements Closeable {
+        private Socket socket;
+        private DataInputStream dataInputStream;
+        private DataOutputStream dataOutputStream;
+
+        public BulbConnection(Socket socket) throws IOException {
+            this.socket = socket;
+            dataOutputStream = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+            dataInputStream = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+        }
+
+        public Socket getSocket() {
+            return socket;
+        }
+
+        public void setSocket(Socket socket) {
+            this.socket = socket;
+        }
+
+        public DataInputStream getDataInputStream() {
+            return dataInputStream;
+        }
+
+        public void setDataInputStream(DataInputStream dataInputStream) {
+            this.dataInputStream = dataInputStream;
+        }
+
+        public DataOutputStream getDataOutputStream() {
+            return dataOutputStream;
+        }
+
+        public void setDataOutputStream(DataOutputStream dataOutputStream) {
+            this.dataOutputStream = dataOutputStream;
+        }
+
+        @Override
+        public void close() throws IOException {
+            dataOutputStream.close();
+            dataInputStream.close();
+            socket.close();
+        }
+
+        public void reconnect() throws IOException {
+            close();
+            socket = new Socket(socket.getInetAddress(), socket.getPort());
+            dataOutputStream = new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+            dataInputStream = new DataInputStream(new BufferedInputStream(socket.getInputStream()));
+        }
+    }
+
+    private static BulbConnection bulbConnection;
+
+    static {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (bulbConnection != null) {
+                try {
+                    bulbConnection.close();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        }));
+    }
 
     private KasaManager() {}
 
-    public static List<Device> getDevices() throws IOException, InterruptedException {
-        Runtime runtime = Runtime.getRuntime();
-        List<Device> devices = new ArrayList<>();
-        Process process = runtime.exec(props.getProperty(BulberConst.COMMAND_DISCOVER));
-        process.waitFor();
+    private static List<InetAddress> getBroadcastAddresses() throws SocketException {
+        List<InetAddress> addresses = new ArrayList<>();
+        Enumeration<NetworkInterface> networkInterfaces = NetworkInterface.getNetworkInterfaces();
 
-        if (process.exitValue() == 0) {
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    Pattern pattern = Pattern.compile(props.getProperty(BulberConst.DEVICE_NAME_REGEX));
-                    Matcher matcher = pattern.matcher(line);
-                    if (matcher.matches()) {
-                        String deviceName = matcher.group(props.getProperty(BulberConst.DEVICE_NAME_PROPERTY));
-                        if ((line = reader.readLine()) != null) {
-                            pattern = Pattern.compile(props.getProperty(BulberConst.DEVICE_ADDRESS_REGEX));
-                            matcher = pattern.matcher(line);
-                            if (matcher.matches()) {
-                                String address = matcher.group(props.getProperty(BulberConst.DEVICE_ADDRESS_PROPERTY));
-                                if ((line = reader.readLine()) != null) {
-                                    pattern = Pattern.compile(props.getProperty(BulberConst.DEVICE_STATE_REGEX));
-                                    matcher = pattern.matcher(line);
-                                    if (matcher.matches()) {
-                                        Device device = new Device(deviceName, address, "ON".equals(matcher.group(props.getProperty(BulberConst.DEVICE_STATE_PROPERTY))));
-                                        int[] temperatureRange = getTemperatureRange(device);
-                                        if (temperatureRange != null) {
-                                            device.setMinTemperature(temperatureRange[0]);
-                                            device.setMaxTemperature(temperatureRange[1]);
-                                            device.setDefaultTemperature(temperatureRange[2] == 0 ? temperatureRange[0] : temperatureRange[2]);
-                                        }
-                                        devices.add(device);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
+        while (networkInterfaces.hasMoreElements()) {
+            NetworkInterface networkInterface = networkInterfaces.nextElement();
+
+            if (networkInterface.isLoopback() || networkInterface.isVirtual() || !networkInterface.isUp()) {
+                continue;
             }
+
+            networkInterface.getInterfaceAddresses().stream()
+                    .map(InterfaceAddress::getBroadcast)
+                    .filter(Objects::nonNull)
+                    .forEach(addresses::add);
         }
 
-        return devices;
+        return addresses;
     }
 
-    private static int[] getTemperatureRange(Device device) throws IOException, InterruptedException {
-        Runtime runtime = Runtime.getRuntime();
-        Process process = runtime.exec(props.getProperty(BulberConst.COMMAND_TEMPERATURE_RANGE).replace("{}", device.getAddress()));
-        process.waitFor();
+    public static List<Device> getDevices() throws IOException {
+        if (bulbConnection != null) {
+            bulbConnection.close();
+            bulbConnection = null;
+        }
 
-        if (process.exitValue() == 0) {
-            int[] rangeAndDefault = new int[3];
-            try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    Pattern pattern = Pattern.compile(props.getProperty(BulberConst.DEVICE_TEMPERATURE_REGEX));
-                    Matcher matcher = pattern.matcher(line);
-                    if (matcher.matches()) {
-                        rangeAndDefault[2] = Integer.parseInt(matcher.group(props.getProperty(BulberConst.DEVICE_TEMPERATURE_PROPERTY)));
-                        if ((line = reader.readLine()) != null) {
-                            pattern = Pattern.compile(props.getProperty(BulberConst.DEVICE_TEMPERATURE_RANGE_REGEX));
-                            matcher = pattern.matcher(line);
-                            if (matcher.matches()) {
-                                rangeAndDefault[0] = Integer.parseInt(matcher.group(props.getProperty(BulberConst.DEVICE_MIN_TEMPERATURE_PROPERTY)));
-                                rangeAndDefault[1] = Integer.parseInt(matcher.group(props.getProperty(BulberConst.DEVICE_MAX_TEMPERATURE_PROPERTY)));
-                            }
-                        }
+        try (DatagramSocket broadcastSocket = new DatagramSocket()) {
+            broadcastSocket.setBroadcast(true);
+            broadcastSocket.setSoTimeout((int)TimeUnit.SECONDS.toMillis(3));
+
+            byte[] requestContent = encodeTPLinkFormat(mapper.writeValueAsBytes(new Bulb(new System())));
+            List<InetAddress> addresses = getBroadcastAddresses();
+            ExecutorService executorService = Executors.newFixedThreadPool(addresses.size());
+
+            logger.info(props.getProperty(BulberConst.BROADCAST_START));
+            addresses.forEach(address -> executorService.execute(() -> {
+                DatagramPacket packet = new DatagramPacket(requestContent, requestContent.length, address, 9999);
+                try {
+                    broadcastSocket.send(packet);
+                } catch (IOException e) {
+                    logger.error(props.getProperty(BulberConst.BROADCAST_ERROR), e);
+                }
+            }));
+            executorService.shutdown();
+
+            List<Device> devices = new ArrayList<>();
+            byte[] buf = new byte[64 * 1024];
+            DatagramPacket packet = new DatagramPacket(buf, buf.length);
+            try {
+                while (true) {
+                    broadcastSocket.receive(packet);
+                    try {
+                        Bulb bulb = mapper.readValue(decodeTPLinkFormat(packet.getData(), 0, packet.getLength()), Bulb.class);
+                        devices.add(new Device(packet.getAddress().getHostAddress(), bulb));
+                    } catch (JsonProcessingException e) {
+                        // if not bulb
+                        logger.warn(props.getProperty(BulberConst.NON_BULB_DEVICE));
                     }
                 }
+            } catch (SocketTimeoutException e) {
+                logger.info(props.getProperty(BulberConst.BROADCAST_END));
             }
-            return rangeAndDefault;
+            return devices;
         }
-
-        return null;
     }
 
-    public static String executeCommand(String command) throws IOException, InterruptedException {
-        Runtime runtime = Runtime.getRuntime();
-        Process process = runtime.exec(command);
+    public static String execute(Device device, Request request) throws IOException {
+        if (bulbConnection == null) {
+            bulbConnection = new BulbConnection(new Socket(device.getAddress(), 9999));
+        }
 
-        process.waitFor();
-        StringBuilder sb = new StringBuilder();
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                sb.append(line);
+        while (true) {
+            byte[] content = encodeTPLinkFormat(mapper.writeValueAsBytes(request));
+            try {
+                bulbConnection.getDataOutputStream().writeInt(content.length);
+                bulbConnection.getDataOutputStream().write(content);
+                bulbConnection.getDataOutputStream().flush();
+
+                byte[] response = new byte[bulbConnection.getDataInputStream().readInt()];
+                bulbConnection.getDataInputStream().readFully(response);
+                return new String(decodeTPLinkFormat(response, 0, response.length), StandardCharsets.UTF_8);
+            } catch (Exception e) {
+                logger.error(props.getProperty(BulberConst.NETWORK_ERROR), e);
+                bulbConnection.reconnect();
             }
         }
-        return sb.toString();
+    }
+
+    private static byte[] encodeTPLinkFormat(byte[] jsonContent) {
+        byte[] buf = new byte[jsonContent.length];
+        byte key = (byte) 0xAB;
+        for(int i=0; i < jsonContent.length; i++) {
+            buf[i] = (byte) (key ^ jsonContent[i]);
+            key = buf[i];
+        }
+        return buf;
+    }
+
+    private static byte[] decodeTPLinkFormat(byte[] content, int offset, int length) {
+        byte[] buf = new byte[length];
+        byte key = (byte) 0xAB;
+        for(int i=0; i < length; i++) {
+            buf[i] = (byte) (key ^ content[i + offset]);
+            key = content[i + offset];
+        }
+        return buf;
     }
 
 }

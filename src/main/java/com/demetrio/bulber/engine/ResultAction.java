@@ -1,23 +1,25 @@
 package com.demetrio.bulber.engine;
 
+import com.demetrio.bulber.engine.bulb.Request;
+
 import java.util.List;
 
 public class ResultAction {
 
-    private String command;
+    private Request request;
     private List<Runnable> uiTasks;
 
-    public ResultAction(String command, List<Runnable> uiTasks) {
-        this.command = command;
+    public ResultAction(Request request, List<Runnable> uiTasks) {
+        this.request = request;
         this.uiTasks = uiTasks;
     }
 
-    public String getCommand() {
-        return command;
+    public Request getRequest() {
+        return request;
     }
 
-    public void setCommand(String command) {
-        this.command = command;
+    public void setRequest(Request request) {
+        this.request = request;
     }
 
     public List<Runnable> getUiTasks() {

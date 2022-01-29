@@ -52,7 +52,7 @@ public class BulberApplication {
         Discover discover;
         try {
             discover = new Discover(KasaManager.getDevices());
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException e) {
             JOptionPane.showMessageDialog(frame, props.getProperty(BulberConst.DISCOVER_FIND_ERROR), props.getProperty(BulberConst.DISCOVER_DIALOG_ERROR_TITLE), JOptionPane.ERROR_MESSAGE);
             discover = new Discover(Collections.emptyList());
         }

@@ -2,6 +2,8 @@ package com.demetrio.bulber.engine;
 
 import com.demetrio.bulber.conf.BulberConst;
 import com.demetrio.bulber.conf.BulberProperties;
+import com.demetrio.bulber.engine.bulb.LightState;
+import com.demetrio.bulber.engine.bulb.Request;
 import com.demetrio.bulber.view.Device;
 import com.demetrio.bulber.view.UIUpdater;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -12,12 +14,13 @@ import org.vosk.Model;
 import org.vosk.Recognizer;
 
 import javax.sound.sampled.*;
-import javax.swing.*;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.IOException;
-import java.util.*;
-import java.util.List;
-import java.util.Timer;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 public class MicrophoneRecognition implements Runnable, AutoCloseable {
@@ -34,13 +37,13 @@ public class MicrophoneRecognition implements Runnable, AutoCloseable {
     private Model model;
     private Recognizer recognizer;
     private final TargetDataLine microphone;
-    private Timer easterEgg1Timer;
+    private ScheduledExecutorService easterEgg1Timer;
 
     private final int chunkSize;
     private final String resultProp;
     private final UIUpdater uiUpdater;
 
-    public MicrophoneRecognition(Device device, UIUpdater updater, Consumer<String> setLCDisplayText) throws LineUnavailableException {
+    public MicrophoneRecognition(Device device, UIUpdater updater, Consumer<String> setLCDisplayText) throws LineUnavailableException, IOException {
         this.setLCDisplayText = setLCDisplayText;
         this.device = device;
         this.uiUpdater = updater;
@@ -79,8 +82,8 @@ public class MicrophoneRecognition implements Runnable, AutoCloseable {
                         ResultAction result = commandParser.parse(device, numberSubstituted, uiUpdater);
                         if (result != null) {
                             setLCDisplayText.accept(numberSubstituted);
-                            logger.debug(props.getProperty(BulberConst.EXECUTE_KASA_COMMAND), result.getCommand());
-                            logger.debug(props.getProperty(BulberConst.KASA_COMMAND_RESPONSE), KasaManager.executeCommand(result.getCommand()));
+                            logger.debug(props.getProperty(BulberConst.EXECUTE_KASA_COMMAND), result.getRequest());
+                            logger.debug(props.getProperty(BulberConst.KASA_COMMAND_RESPONSE), KasaManager.execute(device, result.getRequest()));
                             result.getUiTasks().forEach(Runnable::run);
                         } else {
                             String response = props.getProperty(BulberConst.INVALID_COMMAND);
@@ -92,7 +95,7 @@ public class MicrophoneRecognition implements Runnable, AutoCloseable {
             logger.debug(props.getProperty(BulberConst.STOP_RECOGNIZING));
         } catch (JsonProcessingException e) {
             logger.error(props.getProperty(BulberConst.JSON_READ_ERROR), e);
-        } catch (IOException | InterruptedException e) {
+        } catch (IOException e) {
             logger.error(props.getProperty(BulberConst.KASA_COMMAND_ERROR), e);
         }
     }
@@ -112,7 +115,7 @@ public class MicrophoneRecognition implements Runnable, AutoCloseable {
         }
     }
 
-    public void refresh() {
+    public void refresh() throws IOException {
         recognizer.close();
         model.close();
         model = new Model(props.getProperty(BulberConst.MODELS_PATH));
@@ -124,26 +127,27 @@ public class MicrophoneRecognition implements Runnable, AutoCloseable {
             if (received.equals("disco")) {
                 if (easterEgg1Timer == null) {
                     ThreadLocalRandom random = ThreadLocalRandom.current();
-                    easterEgg1Timer = new Timer();
-                    easterEgg1Timer.scheduleAtFixedRate(new TimerTask() {
-                        @Override
-                        public void run() {
-                            Map<CommandParser.Command, List<Object>> commands = new LinkedHashMap<>();
-                            commands.put(CommandParser.Command.RGB, Arrays.asList(random.nextInt(256), random.nextInt(256), random.nextInt(256)));
-                            commands.put(CommandParser.Command.TRANSITION, Collections.singletonList(0));
-                            try {
-                                KasaManager.executeCommand(commandParser.parse(device, commands));
-                            } catch (IOException | InterruptedException e) {
-                                e.printStackTrace();
-                            }
+                    easterEgg1Timer = Executors.newSingleThreadScheduledExecutor();
+                    easterEgg1Timer.scheduleAtFixedRate(() -> {
+                        LightState changeState = new LightState();
+                        int[] hsv = commandParser.fromRGBToHSV(random.nextInt(256), random.nextInt(256), random.nextInt(256));
+                        changeState.setHue(hsv[0]);
+                        changeState.setSaturation(hsv[1]);
+                        changeState.setBrightness(hsv[2]);
+                        changeState.setTransitionPeriod(0);
+                        changeState.setColorTemp(0);
+                        try {
+                            KasaManager.execute(device, new Request(new Request.Service(changeState)));
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
-                    }, 0, random.nextInt(15, 46));
+                    }, 0, 500, TimeUnit.MILLISECONDS);
                     setLCDisplayText.accept("Disco");
                     return true;
                 }
             } else if (received.equals("ferma disco")) {
                 if (easterEgg1Timer != null) {
-                    easterEgg1Timer.cancel();
+                    easterEgg1Timer.shutdownNow();
                     easterEgg1Timer = null;
                     setLCDisplayText.accept("Ferma disco");
                     return true;

@@ -1,37 +1,20 @@
 package com.demetrio.bulber.view;
 
+import com.demetrio.bulber.engine.bulb.Bulb;
+
+import java.util.Objects;
+
 public class Device {
 
-    private String deviceName;
     private String address;
-    private boolean on;
-    private int minTemperature;
-    private int maxTemperature;
-    private int defaultTemperature;
+    private Bulb bulb;
 
-    public Device() {}
+    public Device() {
+    }
 
-    public Device(String deviceName, String address, boolean on) {
-        this.deviceName = deviceName;
+    public Device(String address, Bulb bulb) {
         this.address = address;
-        this.on = on;
-    }
-
-    public Device(String deviceName, String address, boolean on, int minTemperature, int maxTemperature, int defaultTemperature) {
-        this.deviceName = deviceName;
-        this.address = address;
-        this.on = on;
-        this.minTemperature = minTemperature;
-        this.maxTemperature = maxTemperature;
-        this.defaultTemperature = defaultTemperature;
-    }
-
-    public String getDeviceName() {
-        return deviceName;
-    }
-
-    public void setDeviceName(String deviceName) {
-        this.deviceName = deviceName;
+        this.bulb = bulb;
     }
 
     public String getAddress() {
@@ -42,35 +25,32 @@ public class Device {
         this.address = address;
     }
 
-    public boolean isOn() {
-        return on;
+    public Bulb getBulb() {
+        return bulb;
     }
 
-    public void setOn(boolean on) {
-        this.on = on;
+    public void setBulb(Bulb bulb) {
+        this.bulb = bulb;
     }
 
-    public int getMinTemperature() {
-        return minTemperature;
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        Device device = (Device) o;
+        return Objects.equals(address, device.address) && Objects.equals(bulb, device.bulb);
     }
 
-    public void setMinTemperature(int minTemperature) {
-        this.minTemperature = minTemperature;
+    @Override
+    public int hashCode() {
+        return Objects.hash(address, bulb);
     }
 
-    public int getMaxTemperature() {
-        return maxTemperature;
-    }
-
-    public void setMaxTemperature(int maxTemperature) {
-        this.maxTemperature = maxTemperature;
-    }
-
-    public int getDefaultTemperature() {
-        return defaultTemperature;
-    }
-
-    public void setDefaultTemperature(int defaultTemperature) {
-        this.defaultTemperature = defaultTemperature;
+    @Override
+    public String toString() {
+        return "Device{" +
+                "address='" + address + '\'' +
+                ", bulb=" + bulb +
+                '}';
     }
 }

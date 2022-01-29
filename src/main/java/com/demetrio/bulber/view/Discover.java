@@ -64,7 +64,7 @@ public class Discover extends JPanel {
         @Override
         public Object getValueAt(int rowIndex, int columnIndex) {
             Device device = devices.get(rowIndex);
-            return columnIndex == 0 ? device.getDeviceName() : device.getAddress();
+            return columnIndex == 0 ? device.getBulb().getSystem().getGetSysinfo().getModel() : device.getAddress();
         }
     }
 

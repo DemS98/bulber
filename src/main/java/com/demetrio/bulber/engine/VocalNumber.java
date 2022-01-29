@@ -35,7 +35,11 @@ public class VocalNumber {
         ValueConverters converter = ValueConverters.valueOf(props.getProperty(BulberConst.VOCAL_CONVERTER));
         vocalNumberMap = new HashMap<>();
         for(int i=0; i <= 15000; i++) {
-            String word = converter.asWords(i).replace("-", "").replace(" ", "");
+            String word = converter.asWords(i).replaceAll("-|\\s+", "");
+            // bug in italian version fix
+            if (props.getProperty(BulberConst.LANG).equals("it")) {
+                word = word.replace("oo", "o");
+            }
             vocalNumberMap.put(word, i);
         }
 

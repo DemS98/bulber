@@ -6,18 +6,18 @@
 
     <groupId>com.demetrio</groupId>
     <artifactId>bulber</artifactId>
-    <version>1.0-SNAPSHOT</version>
+    <version>1.0</version>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <maven.compiler.source>8</maven.compiler.source>
         <maven.compiler.target>8</maven.compiler.target>
-        <jna.version>5.8.0</jna.version>
-        <vosk.version>0.3.30</vosk.version>
-        <jackson.version>2.12.4</jackson.version>
+        <jna.version>5.9.0</jna.version>
+        <vosk.version>0.3.33</vosk.version>
+        <jackson.version>2.13.1</jackson.version>
         <commons.configuration2.version>2.7</commons.configuration2.version>
         <beanutils.version>1.9.4</beanutils.version>
-        <logback.version>1.2.5</logback.version>
+        <logback.version>1.2.10</logback.version>
         <tradukisto.version>1.8.0</tradukisto.version>
         <maven-assembly-plugin.version>3.3.0</maven-assembly-plugin.version>
     </properties>
@@ -70,6 +70,7 @@
             <artifactId>tradukisto</artifactId>
             <version>${tradukisto.version}</version>
         </dependency>
+
     </dependencies>
 
     <build>

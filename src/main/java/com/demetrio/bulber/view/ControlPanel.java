@@ -6,6 +6,9 @@ import com.demetrio.bulber.engine.CommandParser;
 import com.demetrio.bulber.engine.KasaManager;
 import com.demetrio.bulber.engine.MicrophoneRecognition;
 import com.demetrio.bulber.engine.VocalNumber;
+import com.demetrio.bulber.engine.bulb.GetSysinfo;
+import com.demetrio.bulber.engine.bulb.LightState;
+import com.demetrio.bulber.engine.bulb.Request;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,15 +17,16 @@ import javax.swing.*;
 import javax.swing.Timer;
 import javax.swing.colorchooser.AbstractColorChooserPanel;
 import javax.swing.text.BadLocationException;
+import javax.swing.tree.DefaultMutableTreeNode;
+import javax.swing.tree.DefaultTreeCellRenderer;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.*;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static com.demetrio.bulber.engine.CommandParser.Command;
+import java.util.function.Consumer;
+import java.util.stream.Stream;
 
 public class ControlPanel extends JPanel implements Closeable {
 
@@ -38,8 +42,10 @@ public class ControlPanel extends JPanel implements Closeable {
     private final JRadioButton seconds;
     private Timer slideText;
 
-    public ControlPanel(Device device) throws LineUnavailableException {
+    public ControlPanel(Device root) throws LineUnavailableException, IOException {
         super();
+
+        GetSysinfo device = root.getBulb().getSystem().getGetSysinfo();
 
         this.setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
 
@@ -52,6 +58,14 @@ public class ControlPanel extends JPanel implements Closeable {
         backButton.setBorderPainted(false);
         backButton.setFocusPainted(false);
         backButton.setContentAreaFilled(false);
+
+        JButton infoButton = new JButton(new ImageIcon(new ImageIcon(Objects.requireNonNull(ControlPanel.class.getClassLoader()
+                .getResource(props.getProperty(BulberConst.INFO_PATH)))).getImage()
+                .getScaledInstance(props.getIntProperty(BulberConst.INFO_SIZE), props.getIntProperty(BulberConst.INFO_SIZE), Image.SCALE_SMOOTH)));
+        infoButton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        infoButton.setBorderPainted(false);
+        infoButton.setFocusPainted(false);
+        infoButton.setContentAreaFilled(false);
 
         JPanel micDisplayPanel = new JPanel();
         micDisplayPanel.setLayout(new BoxLayout(micDisplayPanel, BoxLayout.Y_AXIS));
@@ -155,7 +169,7 @@ public class ControlPanel extends JPanel implements Closeable {
         brightnessPanel.setLayout(new BoxLayout(brightnessPanel, BoxLayout.Y_AXIS));
         brightnessPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.BRIGHTNESS_BORDER_TITLE)));
         int brightnessMinValue = props.getIntProperty(BulberConst.BRIGHTNESS_MIN_VALUE);
-        int brightnessDefaultValue = props.getIntProperty(BulberConst.BRIGHTNESS_DEFAULT_VALUE);
+        int brightnessDefaultValue = device.getLightState().getBrightness();
         int brightnessMaxValue = props.getIntProperty(BulberConst.BRIGHTNESS_MAX_VALUE);
         JPanel brightnessTextFieldPanel = new JPanel();
         JTextField brightnessTextField = new JTextField(brightnessDefaultValue + "%", 4);
@@ -180,15 +194,19 @@ public class ControlPanel extends JPanel implements Closeable {
         brightnessPanel.add(Box.createVerticalStrut(10));
         brightnessPanel.add(confirmBrightnessPanel);
         brightnessTemperaturePanel.add(brightnessPanel);
-        if (device.getMinTemperature() > 0 && device.getMaxTemperature() > device.getMinTemperature()) {
+        if (device.isTemperatureSupported()) {
+            int actualTemperature = device.getLightState().getColorTemp();
+            if (actualTemperature == 0) {
+                actualTemperature = device.getMinTemperature();
+            }
             temperaturePanel = new JPanel();
             temperaturePanel.setLayout(new BoxLayout(temperaturePanel, BoxLayout.Y_AXIS));
             temperaturePanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.TEMPERATURE_BORDER_TITLE)));
             JPanel temperatureTextFieldPanel = new JPanel();
-            temperatureTextField = new JTextField(device.getDefaultTemperature() + "K", String.valueOf(device.getMinTemperature()).length() + 1);
+            temperatureTextField = new JTextField(actualTemperature + "K", String.valueOf(device.getMinTemperature()).length() + 1);
             temperatureTextField.setHorizontalAlignment(SwingConstants.CENTER);
             temperatureTextFieldPanel.add(temperatureTextField);
-            temperature = new JSlider(device.getMinTemperature(), device.getMaxTemperature(), device.getDefaultTemperature());
+            temperature = new JSlider(device.getMinTemperature(), device.getMaxTemperature(), actualTemperature);
             temperature.setPaintTicks(true);
             temperature.setMajorTickSpacing(500);
             Hashtable<Integer, JLabel> temperatureLabels = new Hashtable<>();
@@ -252,15 +270,28 @@ public class ControlPanel extends JPanel implements Closeable {
         commandPanel.add(Box.createVerticalStrut(10));
         commandPanel.add(optionsPanel);
 
+        Consumer<Boolean> onOffAction = selected -> {
+            colorPicker.setEnabled(selected);
+            confirmColor.setEnabled(selected);
+            brightness.setEnabled(selected);
+            brightnessTextField.setEnabled(selected);
+            confirmBrightness.setEnabled(selected);
+            if (temperature != null) {
+                temperature.setEnabled(selected);
+                temperatureTextField.setEnabled(selected);
+                confirmTemperature.setEnabled(selected);
+            }
+        };
+
         UIUpdater uiUpdater = UIUpdater.builder()
                 .withColorPicker(colorPicker)
                 .withBrightness(brightness, brightnessTextField)
                 .withTemperature(temperature, temperatureTextField)
                 .withTransition(transition, transitionTextField)
-                .withPowerButton(onOff)
+                .withPowerButton(onOff, onOffAction)
                 .build();
 
-        mr = new MicrophoneRecognition(device, uiUpdater, text -> {
+        mr = new MicrophoneRecognition(root, uiUpdater, text -> {
             if (text.length() > 0) {
                 if (slideText != null && slideText.isRunning()) {
                     slideText.stop();
@@ -323,32 +354,36 @@ public class ControlPanel extends JPanel implements Closeable {
                         protected Void doInBackground() {
                             micCheckBox.setSelected(false);
                             props.changeLanguage(lang);
-                            mr.refresh();
-                            CommandParser.getInstance().refresh();
-                            micDisplayPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true),
-                                    props.getProperty(BulberConst.MICROPHONE_BORDER_TITLE)));
-                            micCheckBox.setText(props.getProperty(BulberConst.MICROPHONE_ON_ALWAYS));
-                            Hashtable<Integer, JLabel> newLabels = new Hashtable<>();
-                            newLabels.put(lcdisplayMaxVelocity, new JLabel(props.getProperty(BulberConst.LCDISPLAY_MAX_VELOCITY_LABEL)));
-                            newLabels.put(lcdisplayMinVelocity, new JLabel(props.getProperty(BulberConst.LCDISPLAY_MIN_VELOCITY_LABEL)));
-                            displayVelocity.setLabelTable(newLabels);
-                            micDisplayPanel.revalidate();
-                            micDisplayPanel.repaint();
-                            commandScrollPane.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COMMAND_PANEL_BORDER_TITLE)));
-                            colorPickerPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COLOR_PICKER_BORDER_TITLE)));
-                            confirmColor.setText(props.getProperty(BulberConst.BUTTON_CONFIRM));
-                            brightnessPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.BRIGHTNESS_BORDER_TITLE)));
-                            confirmBrightness.setText(props.getProperty(BulberConst.BUTTON_CONFIRM));
-                            if (temperature != null) {
-                                temperaturePanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.TEMPERATURE_BORDER_TITLE)));
-                                confirmTemperature.setText(props.getProperty(BulberConst.BUTTON_CONFIRM));
+                            try {
+                                mr.refresh();
+                                CommandParser.getInstance().refresh();
+                                micDisplayPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true),
+                                        props.getProperty(BulberConst.MICROPHONE_BORDER_TITLE)));
+                                micCheckBox.setText(props.getProperty(BulberConst.MICROPHONE_ON_ALWAYS));
+                                Hashtable<Integer, JLabel> newLabels = new Hashtable<>();
+                                newLabels.put(lcdisplayMaxVelocity, new JLabel(props.getProperty(BulberConst.LCDISPLAY_MAX_VELOCITY_LABEL)));
+                                newLabels.put(lcdisplayMinVelocity, new JLabel(props.getProperty(BulberConst.LCDISPLAY_MIN_VELOCITY_LABEL)));
+                                displayVelocity.setLabelTable(newLabels);
+                                micDisplayPanel.revalidate();
+                                micDisplayPanel.repaint();
+                                commandScrollPane.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COMMAND_PANEL_BORDER_TITLE)));
+                                colorPickerPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.COLOR_PICKER_BORDER_TITLE)));
+                                confirmColor.setText(props.getProperty(BulberConst.BUTTON_CONFIRM));
+                                brightnessPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.BRIGHTNESS_BORDER_TITLE)));
+                                confirmBrightness.setText(props.getProperty(BulberConst.BUTTON_CONFIRM));
+                                if (temperature != null) {
+                                    temperaturePanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.TEMPERATURE_BORDER_TITLE)));
+                                    confirmTemperature.setText(props.getProperty(BulberConst.BUTTON_CONFIRM));
+                                }
+                                transitionPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.TRANSITION_BORDER_TITLE)));
+                                seconds.setText(props.getProperty(BulberConst.TRANSITION_SECONDS));
+                                milliseconds.setText(props.getProperty(BulberConst.TRANSITION_MILLISECONDS));
+                                commandPanel.revalidate();
+                                commandPanel.repaint();
+                                VocalNumber.getInstance().initCache();
+                            } catch (IOException e) {
+                                e.printStackTrace();
                             }
-                            transitionPanel.setBorder(BorderFactory.createTitledBorder(BorderFactory.createLineBorder(Color.BLACK, 1, true), props.getProperty(BulberConst.TRANSITION_BORDER_TITLE)));
-                            seconds.setText(props.getProperty(BulberConst.TRANSITION_SECONDS));
-                            milliseconds.setText(props.getProperty(BulberConst.TRANSITION_MILLISECONDS));
-                            commandPanel.revalidate();
-                            commandPanel.repaint();
-                            VocalNumber.getInstance().initCache();
                             return null;
                         }
 
@@ -367,6 +402,7 @@ public class ControlPanel extends JPanel implements Closeable {
         });
 
         topPanel.add(backButton, BorderLayout.WEST);
+        topPanel.add(infoButton, BorderLayout.CENTER);
         topPanel.add(flowLanguagePanel, BorderLayout.EAST);
 
         this.add(topPanel);
@@ -434,38 +470,20 @@ public class ControlPanel extends JPanel implements Closeable {
             }
         });
 
-        onOff.addItemListener(itemEvent -> {
-            boolean selected = itemEvent.getStateChange() == ItemEvent.SELECTED;
+        onOff.addActionListener(itemEvent -> {
+            boolean selected = ((JToggleButton)itemEvent.getSource()).isSelected();
             new SwingWorker<Void, Void>() {
 
                 @Override
                 protected Void doInBackground() {
-                    String command = CommandParser.getInstance().parse(device, Collections.singletonMap(selected ? Command.ON : Command.OFF, Collections.emptyList()));
-                    logger.debug(props.getProperty(BulberConst.EXECUTE_KASA_COMMAND), command);
-                    try {
-                        logger.debug(props.getProperty(BulberConst.KASA_COMMAND_RESPONSE), KasaManager.executeCommand(command));
-                    } catch (IOException | InterruptedException e) {
-                        logger.error(props.getProperty(BulberConst.KASA_COMMAND_ERROR), e);
-                    }
+                    sendCommand(root, selected, null, null, null,
+                            getTransitionValue());
                     return null;
                 }
 
                 @Override
                 protected void done() {
-                    colorPicker.setEnabled(selected);
-                    confirmColor.setEnabled(selected);
-                    brightness.setEnabled(selected);
-                    brightnessTextField.setEnabled(selected);
-                    confirmBrightness.setEnabled(selected);
-                    transition.setEnabled(selected);
-                    transitionTextField.setEnabled(selected);
-                    seconds.setEnabled(selected);
-                    milliseconds.setEnabled(selected);
-                    if (temperature != null) {
-                        temperature.setEnabled(selected);
-                        temperatureTextField.setEnabled(selected);
-                        confirmTemperature.setEnabled(selected);
-                    }
+                    onOffAction.accept(selected);
                 }
             }.execute();
         });
@@ -514,13 +532,16 @@ public class ControlPanel extends JPanel implements Closeable {
 
         confirmColor.addActionListener(actionEvent -> {
             Color color = colorPicker.getColor();
-            sendCommand(device, Command.RGB, color.getRed(), color.getGreen(), color.getBlue());
+            sendCommand(root, null, new int[]{color.getRed(), color.getGreen(), color.getBlue()}, null,
+                    null, getTransitionValue());
         });
 
-        confirmBrightness.addActionListener(actionEvent -> sendCommand(device, Command.BRIGHTNESS, brightness.getValue()));
+        confirmBrightness.addActionListener(actionEvent -> sendCommand(root, null, null, brightness.getValue(),
+                null, getTransitionValue()));
 
         if (temperature != null) {
-            confirmTemperature.addActionListener(actionEvent -> sendCommand(device, Command.TEMPERATURE, temperature.getValue()));
+            confirmTemperature.addActionListener(actionEvent -> sendCommand(root, null, null, null,
+                    temperature.getValue(), getTransitionValue()));
             temperature.addMouseMotionListener(new TextSliderAdapter(temperature, temperatureTextField, "K"));
         }
 
@@ -545,7 +566,7 @@ public class ControlPanel extends JPanel implements Closeable {
                     Discover discover;
                     try {
                         discover = new Discover(KasaManager.getDevices());
-                    } catch (IOException | InterruptedException e) {
+                    } catch (IOException e) {
                         JOptionPane.showMessageDialog(frame, props.getProperty(BulberConst.DISCOVER_FIND_ERROR), props.getProperty(BulberConst.DISCOVER_DIALOG_ERROR_TITLE), JOptionPane.ERROR_MESSAGE);
                         discover = new Discover(Collections.emptyList());
                     }
@@ -562,6 +583,49 @@ public class ControlPanel extends JPanel implements Closeable {
             }.execute();
 
         });
+
+        infoButton.addActionListener(actionEvent -> {
+            DefaultMutableTreeNode rootNode = new DefaultMutableTreeNode();
+            rootNode.add(new DefaultMutableTreeNode(String.format("Device id: %s", device.getDeviceId())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Model: %s", device.getModel())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("OEM id: %s", device.getOemId())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Software version: %s", device.getSwVer())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Active mode: %s", device.getActiveMode())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Alias: %s", device.getAlias())));
+            DefaultMutableTreeNode controlProtocols = new DefaultMutableTreeNode("Control protocols");
+            controlProtocols.add(new DefaultMutableTreeNode(String.format("Name: %s", device.getCtrlProtocols().getName())));
+            controlProtocols.add(new DefaultMutableTreeNode(String.format("Version: %s", device.getCtrlProtocols().getVersion())));
+            rootNode.add(controlProtocols);
+            rootNode.add(new DefaultMutableTreeNode(String.format("Description: %s", device.getDescription())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Dev state: %s", device.getDevState())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Discover version: %s", device.getDiscoVer())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Hardware id: %s", device.getHwId())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Hardware version: %s", device.getHwVer())));
+            rootNode.add(new DefaultMutableTreeNode("Device " + (device.getIsColor() == 0 ? "not" : "") + " supports RGB colors"));
+            rootNode.add(new DefaultMutableTreeNode("Device is " + (device.getIsDimmable() == 0 ? "not" : "") + " dimmable"));
+            rootNode.add(new DefaultMutableTreeNode("Device is " + (device.getIsFactory() ? "not" : "") + " factory"));
+            rootNode.add(new DefaultMutableTreeNode("Device " + (device.getIsVariableColorTemp() == 0 ? "not" : "") + " supports temperature"));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Latitude: %d", device.getLatitudeI())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("Longitude: %d", device.getLongitudeI())));
+            rootNode.add(new DefaultMutableTreeNode(String.format("RSSI: %d", device.getRssi())));
+
+            JTree tree = new JTree(rootNode);
+            tree.setRootVisible(false);
+
+            DefaultTreeCellRenderer renderer = new DefaultTreeCellRenderer();
+            renderer.setLeafIcon(new ImageIcon(Objects.requireNonNull(ControlPanel.class.getClassLoader().getResource(props.getProperty(BulberConst.LEAF_TREE_PATH)))));
+            renderer.setOpenIcon(new ImageIcon(Objects.requireNonNull(ControlPanel.class.getClassLoader().getResource(props.getProperty(BulberConst.OPEN_TREE_PATH)))));
+            renderer.setClosedIcon(new ImageIcon(Objects.requireNonNull(ControlPanel.class.getClassLoader().getResource(props.getProperty(BulberConst.CLOSE_TREE_PATH)))));
+            tree.setCellRenderer(renderer);
+
+            JScrollPane view = new JScrollPane(tree);
+
+            JFrame frame = new JFrame(device.getModel() + " info");
+            frame.add(view);
+            frame.pack();
+            frame.setLocationRelativeTo(null);
+            frame.setVisible(true);
+        });
     }
 
     @Override
@@ -569,19 +633,32 @@ public class ControlPanel extends JPanel implements Closeable {
         mr.close();
     }
 
-    private void sendCommand(Device device, Command command, Object... params) {
-        Map<Command, List<Object>> commands = new LinkedHashMap<>();
-        commands.put(command, Arrays.asList(params));
-        if (transition.getValue() > 0) {
-            commands.put(Command.TRANSITION, Collections.singletonList(seconds.isSelected() ? transition.getValue() * 1000 : transition.getValue()));
+    private void sendCommand(Device device, Boolean onOff, int[] rgb, Integer brightness, Integer temperature, Integer transition) {
+        if (!Stream.of(onOff, rgb, brightness, temperature, transition).allMatch(Objects::isNull)) {
+            int[] hsv = rgb != null ? CommandParser.getInstance().fromRGBToHSV(rgb[0], rgb[1], rgb[2]) : null;
+            if (hsv != null) {
+                brightness = hsv[2];
+                temperature = 0;
+            }
+            LightState changeState = new LightState(brightness,
+                    temperature, hsv != null ? hsv[0] : null, null, onOff == null ? 1 : (onOff ? 1 : 0),
+                    hsv != null ? hsv[1] : null, transition);
+            Request request = new Request(new Request.Service(changeState));
+            try {
+                logger.debug(props.getProperty(BulberConst.EXECUTE_KASA_COMMAND), request);
+                logger.debug(props.getProperty(BulberConst.KASA_COMMAND_RESPONSE), KasaManager.execute(device, request));
+            } catch (IOException e) {
+                logger.error(props.getProperty(BulberConst.KASA_COMMAND_ERROR), e);
+            }
         }
-        try {
-            String cmd = CommandParser.getInstance().parse(device, commands);
-            logger.debug(props.getProperty(BulberConst.EXECUTE_KASA_COMMAND), cmd);
-            logger.debug(props.getProperty(BulberConst.KASA_COMMAND_RESPONSE), KasaManager.executeCommand(cmd));
-        } catch (IOException | InterruptedException e) {
-            logger.error(props.getProperty(BulberConst.KASA_COMMAND_ERROR), e);
+    }
+
+    private Integer getTransitionValue() {
+        int transitionValue = transition.getValue();
+        if (seconds.isSelected()) {
+            transitionValue *= 1000;
         }
+        return transitionValue > 0 ? transitionValue : null;
     }
 
 }
